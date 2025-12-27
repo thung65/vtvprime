@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTV Prime Decoder PRO</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/3.2.2/shaka-player.compiled.js"></script>
+    <style>
+        body { margin: 0; background: #000; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        #player-container { position: relative; width: 100vw; height: 100vh; background: #000; }
+        video { width: 100%; height: 100%; object-fit: contain !important; }
+
+        /* Giao diện Info Bar giống TV Box VTV Prime */
+        #infobar {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 100%);
+            padding: 40px 60px; transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex; align-items: center; z-index: 10;
+        }
+        #infobar.show { transform: translateY(0); }
+
+        .ch-num { font-size: 60px; font-weight: bold; color: #ffeb3b; border-right: 2px solid rgba(255,255,255,0.3); padding-right: 30px; margin-right: 30px; line-height: 1; }
+        .ch-info { flex-grow: 1; }
+        .ch-name { font-size: 30px; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+        .ch-res { font-size: 14px; color: #00ff00; letter-spacing: 1px; font-weight: bold; }
+
+        /* Màn hình chờ Boot Box */
+        #boot-screen {
+            position: absolute; inset: 0; background: #000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100;
+        }
+        .spinner { width: 40px; height: 40px; border: 4px solid #333; border-top: 4px solid #ffeb3b; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        
+        .prime-logo { position: absolute; top: 30px; right: 40px; font-size: 20px; opacity: 0.5; font-weight: bold; letter-spacing: 2px; }
+    </style>
+</head>
+<body>
+
+<div id="player-container">
+    <div id="boot-screen">
+        <div class="spinner"></div>
+        <div style="font-size: 12px; letter-spacing: 4px; color: #888;">VTV PRIME • SYSTEM DECODING</div>
+    </div>
+
+    <div class="prime-logo">VTV PRIME</div>
+
+    <video id="video" autoplay playsinline></video>
+
+    <div id="infobar">
+        <div class="ch-num" id="ui-num">--</div>
+        <div class="ch-info">
+            <div class="ch-name" id="ui-name">ĐANG TẢI...</div>
+            <div class="ch-res" id="ui-res">KIỂM TRA ĐỘ PHÂN GIẢI...</div>
+        </div>
+        <div id="clock" style="font-size: 20px; font-weight: bold; opacity: 0.8;">00:00</div>
+    </div>
+</div>
+
+<script>
+    async function initApp() {
+        const video = document.getElementById('video');
+        const uiName = document.getElementById('ui-name');
+        const uiNum = document.getElementById('ui-num');
+        const uiRes = document.getElementById('ui-res');
+        const player = new shaka.Player(video);
+
+        // Lấy thông số từ URL (ví dụ: ?keys=KID:KEY&videoUrl=LINK.mpd)
+        const params = new URLSearchParams(window.location.search);
+        const url = params.get('videoUrl');
+        const keys = params.get('keys');
+
+        if (!url || !keys) {
+            document.querySelector('#boot-screen div:last-child').innerText = "VUI LÒNG CUNG CẤP LINK VÀ KEY";
+            return;
+        }
+
+        // Tách Key ID và Key
+        const [kid, key] = keys.split(':');
+
+        // Cấu hình tối ưu cho 1080p (SCTV15) và chống giật trên Web Tivi Samsung
+        player.configure({
+            drm: { clearKeys: { [kid]: key } },
+            streaming: {
+                bufferingGoal: 20,
+                rebufferingGoal: 2,
+                bufferBehind: 10
+            }
+        });
+
+        // Xử lý thông tin kênh tự động
+        let chName = "KÊNH QUỐC TẾ";
+        let chNumber = "??";
+        const sctvMatch = url.match(/sctv(\d+)/i);
+        if (sctvMatch) {
+            chNumber = sctvMatch[1].padStart(2, '0');
+            chName = "SCTV " + sctvMatch[1];
+        }
+
+        uiName.innerText = chName;
+        uiNum.innerText = chNumber;
+
+        // Theo dõi và cập nhật chất lượng (720p/1080p)
+        player.addEventListener('variantchanged', () => {
+            const tracks = player.getVariantTracks().sort((a,b) => b.height - a.height);
+            if (tracks.length > 0) {
+                const h = tracks[0].height;
+                uiRes.innerText = h + "P HD" + (h >= 1080 ? " • FULL HD QUALITY" : " • NÂNG CẤP ĐẾN 2027");
+            }
+        });
+
+        try {
+            await player.load(url);
+            document.getElementById('boot-screen').style.display = 'none';
+            
+            // Hiện Info Bar rồi tự ẩn
+            const bar = document.getElementById('infobar');
+            bar.classList.add('show');
+            setTimeout(() => bar.classList.remove('show'), 6000);
+        } catch (e) {
+            console.error("Lỗi:", e);
+        }
+    }
+
+    // Cập nhật đồng hồ hệ thống
+    setInterval(() => {
+        const d = new Date();
+        document.getElementById('clock').innerText = d.getHours().toString().padStart(2, '0') + ":" + d.getMinutes().toString().padStart(2, '0');
+    }, 1000);
+
+    shaka.polyfill.installAll();
+    initApp();
+</script>
+</body>
+</html>
