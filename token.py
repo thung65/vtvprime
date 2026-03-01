@@ -1,22 +1,34 @@
 import requests
 import re
 
-def hunt_sctv_link():
-    # Giả lập là trình duyệt để tvmienphi.org không chặn
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    url = "VTV https://tvmienphi.org/live-tv/xem-kenh-sctv5-truc-tuyen.html" # Trang chủ bạn tìm thấy
-    
+url_nguon = "https://tvmienphi.org/live-tv/xem-kenh-sctv5-truc-tuyen.html" 
+
+def hunt_link():
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Referer': 'https://tvmienphi.org/'
+    }
     try:
-        r = requests.get(url, headers=headers)
-        # Tìm link có cấu trúc cdn1...token...e=...
-        match = re.search(r'https://[^\s"\']+\.m3u8\?token=[a-zA-Z0-9_-]+&e=\d+', r.text)
+        response = requests.get(url_nguon, headers=headers, timeout=20)
+        print(f"Trạng thái web: {response.status_code}") # In ra mã trạng thái
+        
+        # Tìm mọi link có đuôi m3u8 và có token
+        pattern = r'(https?://[^\s"\']+\.m3u8\?[^\s"\']+token=[a-zA-Z0-9_-]+[^\s"\']*)'
+        match = re.search(pattern, response.text)
+        
         if match:
             return match.group(0)
-    except:
-        return None
+    except Exception as e:
+        print(f"Lỗi kết nối: {e}")
+    return None
 
-# Sau khi lấy được, ghi đè vào file m3u của bạn
-link = hunt_sctv_link()
-if link:
-    with open("sctv.m3u", "w") as f:
-        f.write(f"#EXTM3U\n#EXTINF:-1,SCTV 5 Auto\n{link}")
+new_link = hunt_link()
+
+if new_link:
+    with open("sctv_auto.m3u", "w", encoding="utf-8") as f:
+        f.write("#EXTM3U\n#EXTINF:-1, SCTV 5 Auto\n" + new_link)
+    print("Đã tìm thấy và lưu link!")
+else:
+    print("Không tìm thấy link trong mã nguồn trang web.")
+    # In ra một đoạn nhỏ mã nguồn để kiểm tra (tùy chọn)
+    # print(response.text[:500]) 
